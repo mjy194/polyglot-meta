@@ -3,8 +3,10 @@
 # 凭证写死在下方 Step 4 的环境变量中（请与 config.yaml 保持同步）
 
 set -e
-POLY_DIR="/home/javion/work/tools/polyglot-meta/polyglot/src/srv"
-ADAPTER_DIR="/home/javion/work/tools/polyglot-meta/adapter"
+# 以脚本所在目录为基准定位项目子目录，支持从任意位置调用
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+POLY_DIR="$SCRIPT_DIR/../polyglot/src/srv"
+ADAPTER_DIR="$SCRIPT_DIR/../adapter"
 POLY_BIN="/tmp/polyglot-server"
 ADAPTER_BIN="/tmp/uipath-adapter"
 POLY_LOG="/tmp/polyglot.log"
