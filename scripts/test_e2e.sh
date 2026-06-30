@@ -6,7 +6,7 @@ set -e
 # 以脚本所在目录为基准定位项目子目录，支持从任意位置调用
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 POLY_DIR="$SCRIPT_DIR/../polyglot/src/srv"
-ADAPTER_DIR="$SCRIPT_DIR/../adapter"
+ADAPTER_DIR="$SCRIPT_DIR/../adapter/uipath"
 POLY_BIN="/tmp/polyglot-server"
 ADAPTER_BIN="/tmp/uipath-adapter"
 POLY_LOG="/tmp/polyglot.log"
