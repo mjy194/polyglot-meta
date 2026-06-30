@@ -1,0 +1,47 @@
+# Polyglot Configuration
+
+server:
+  bind_host: "0.0.0.0"
+  port: 3000
+
+backend:
+  provider: "uipath"
+
+  uipath:
+    # 替換為你的 UiPath 組織和租戶名稱
+    org_name: "uarchqebl"
+    tenant_name: "DefaultTenant"
+
+    # Email/Password 自動登錄配置
+    # 替換為你的實際帳號密碼
+    email: "abc@uruz.top"
+    password: "Yingdaodev1."
+
+    # 認證數據持久化路徑
+    auth_db_path: "data.db"
+
+
+model_mapping:
+  claude-opus-4-6: claude_opus_4_7  
+  claude-opus-4-7: claude_opus_4_7
+  claude-opus-4-8: claude_opus_4_7
+  claude-haiku-4-5: claude_haiku_4_5
+  claude-sonnet-4-6: claude_sonnet_4_6  
+
+  gpt-5.5: gpt_5_5
+  gpt-5.4: gpt_5_4
+  gpt-5.4-mini: gpt_5_4_mini
+
+  gemini-2.5-pro: gemini_2_5_pro
+  gemini-3-flash-preview: gemini_3_flash_preview
+  gemini-3.1-pro-preview: gemini_3_1_pro_preview
+
+
+# 日誌配置
+logging:
+  level: info
+  outputs:
+    - stdout
+    - file
+  rotation: daily
+  max_log_files: 7
