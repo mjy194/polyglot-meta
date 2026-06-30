@@ -3,8 +3,8 @@
 # 凭证写死在下方 Step 4 的环境变量中（请与 config.yaml 保持同步）
 
 set -e
-POLY_DIR="/home/javion/work/tools/polyglot-go/polyglot/src/srv"
-ADAPTER_DIR="/home/javion/work/tools/polyglot-go/uipath_adapter"
+POLY_DIR="/home/javion/work/tools/polyglot-meta/polyglot/src/srv"
+ADAPTER_DIR="/home/javion/work/tools/polyglot-meta/adapter"
 POLY_BIN="/tmp/polyglot-server"
 ADAPTER_BIN="/tmp/uipath-adapter"
 POLY_LOG="/tmp/polyglot.log"
