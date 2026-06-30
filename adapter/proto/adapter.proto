@@ -1,0 +1,479 @@
+syntax = "proto3";
+
+package adapter;
+
+option go_package = "uipath-adapter/proto";
+
+// AdapterService 定义 Adapter 必须实现的 gRPC 服务
+service AdapterService {
+  // GetMetadata 获取 Adapter 的元数据信息
+  rpc GetMetadata(GetMetadataRequest) returns (AdapterMetadata);
+
+  // HealthCheck 执行健康检查
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // ProcessRequest 处理请求并返回流式响应
+  rpc ProcessRequest(UniversalRequest) returns (stream UniversalResponse);
+
+  // ProcessNative 处理原生协议请求并返回原生 HTTP/SSE 响应片段。
+  // Adapter 在 metadata.native_protocols 中声明支持范围；主服务不支持时回退 Universal。
+  rpc ProcessNative(NativeRequest) returns (stream NativeResponse);
+
+  // CancelRequest 取消正在进行的请求
+  rpc CancelRequest(CancelRequestRequest) returns (CancelRequestResponse);
+}
+
+// StorageService 主服务提供的通用 KV 存储接口
+// 框架不解析 value 内容，adapter 自定义编码（JSON / proto / 任何格式）
+service StorageService {
+  // Put 写入一条记录（带可选 TTL）
+  rpc Put(PutRequest) returns (PutResponse);
+
+  // Get 按 (source_id, key) 读取
+  rpc Get(GetRequest) returns (GetResponse);
+
+  // Delete 按 (source_id, key) 删除
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+
+  // List 按 source_id 列出 keys，可选 prefix 过滤
+  rpc List(ListRequest) returns (ListResponse);
+}
+
+// AccountService 主服务提供的账号管理服务
+service AccountService {
+  // 注册账号源
+  rpc RegisterAccountSource(RegisterSourceRequest) returns (RegisterSourceResponse);
+
+  // 获取可用账号
+  rpc AcquireAccount(AcquireAccountRequest) returns (AcquireAccountResponse);
+
+  // 释放账号
+  rpc ReleaseAccount(ReleaseAccountRequest) returns (ReleaseAccountResponse);
+
+  // 上报使用情况
+  rpc ReportUsage(ReportUsageRequest) returns (ReportUsageResponse);
+
+  // 心跳：adapter 周期上报存活，框架回传最新配置（热更新代理等）
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse);
+}
+
+// AccountSourceService Adapter 实现的账号源服务
+service AccountSourceService {
+  // 主框架调用：列出可用账号
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+
+  // 主框架调用：刷新/续期某个账号
+  rpc RefreshAccount(RefreshAccountRequest) returns (RefreshAccountResponse);
+
+  // 主框架调用：验证账号健康状态
+  rpc HealthCheck(AccountHealthCheckRequest) returns (AccountHealthCheckResponse);
+
+  // 主框架调用：请求补充账号
+  rpc SupplyAccounts(SupplyAccountsRequest) returns (SupplyAccountsResponse);
+}
+
+// ============================================================================
+// Account Service - 主框架提供
+// ============================================================================
+
+message RegisterSourceRequest {
+  string source_id = 1;
+  string provider = 2;
+  string callback_addr = 3;
+  repeated string capabilities = 4;
+  WatermarkConfig watermark = 5;
+}
+
+message WatermarkConfig {
+  int32 min_accounts = 1;
+  int32 max_accounts = 2;
+  int32 low_watermark = 3;
+  int32 high_watermark = 4;
+  int32 supply_batch_size = 5;
+}
+
+// SourceConfig 框架下发给 adapter 的运行时配置（注册响应 + 心跳回传）
+message SourceConfig {
+  string proxy_url = 1;   // scheme://[user:pass@]host:port；空 = 不走代理
+}
+
+message RegisterSourceResponse {
+  bool success = 1;
+  string message = 2;
+  SourceConfig config = 3;   // 注册时下发初始配置
+}
+
+// Heartbeat — adapter 周期上报存活，框架回传最新配置实现热更新
+message HeartbeatRequest {
+  string source_id = 1;
+  string instance_id = 2;   // 与 UpsertInstance 的 ID 对齐（= source_id）
+  string status = 3;        // "active"
+}
+
+message HeartbeatResponse {
+  bool success = 1;
+  SourceConfig config = 2;  // 最新配置（代理等），adapter 据此热更新
+}
+
+message AcquireAccountRequest {
+  string provider = 1;
+  map<string, string> filters = 2;
+  string session_id = 3;
+}
+
+message AcquireAccountResponse {
+  bool available = 1;
+  string account_id = 2;
+  map<string, string> credentials = 3;
+  map<string, string> metadata = 4;
+}
+
+message ReleaseAccountRequest {
+  string account_id = 1;
+}
+
+message ReleaseAccountResponse {
+  bool success = 1;
+}
+
+message ReportUsageRequest {
+  string account_id = 1;
+  int64 tokens_used = 2;
+  int64 requests_count = 3;
+}
+
+message ReportUsageResponse {
+  bool success = 1;
+}
+
+// ============================================================================
+// Storage Service - Token 持久化
+// ============================================================================
+
+message PutRequest {
+  string source_id = 1;
+  string key = 2;
+  bytes value = 3;
+  int64 expires_at = 4;
+}
+
+message PutResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message GetRequest {
+  string source_id = 1;
+  string key = 2;
+}
+
+message GetResponse {
+  bool found = 1;
+  bytes value = 2;
+  int64 expires_at = 3;
+}
+
+message DeleteRequest {
+  string source_id = 1;
+  string key = 2;
+}
+
+message DeleteResponse {
+  bool success = 1;
+}
+
+message ListRequest {
+  string source_id = 1;
+  string prefix = 2;
+}
+
+message ListResponse {
+  repeated KVEntry entries = 1;
+}
+
+message KVEntry {
+  string key = 1;
+  int64 expires_at = 2;
+}
+
+// ============================================================================
+// Account Source Service - Adapter 实现
+// ============================================================================
+
+message ListAccountsRequest {
+  string source_id = 1;
+}
+
+message ListAccountsResponse {
+  repeated AccountInfo accounts = 1;
+}
+
+message AccountInfo {
+  string account_id = 1;
+  map<string, string> credentials = 2;
+  map<string, string> metadata = 3;
+  int64 expires_at = 4;
+  AccountQuota quota = 5;
+}
+
+message AccountQuota {
+  int64 monthly_limit = 1;
+  int64 used = 2;
+  int64 rpm_limit = 3;
+}
+
+message RefreshAccountRequest {
+  string source_id = 1;
+  string account_id = 2;
+}
+
+message RefreshAccountResponse {
+  bool success = 1;
+  map<string, string> new_credentials = 2;
+  int64 expires_at = 3;
+}
+
+message AccountHealthCheckRequest {
+  string source_id = 1;
+  string account_id = 2;
+}
+
+message AccountHealthCheckResponse {
+  string status = 1;  // "healthy", "rate_limited", "quota_exceeded", "auth_failed"
+  string details = 2;
+}
+
+message SupplyAccountsRequest {
+  string source_id = 1;
+  int32 count = 2;
+  string reason = 3;
+  map<string, string> hints = 4;
+}
+
+message SupplyAccountsResponse {
+  int32 supplied_count = 1;
+  repeated AccountInfo accounts = 2;
+  string message = 3;
+}
+
+// ============================================================================
+// Metadata
+// ============================================================================
+
+message GetMetadataRequest {}
+
+message AdapterMetadata {
+  string name = 1;
+  string version = 2;
+  repeated string supported_models = 3;
+  AdapterCapabilities capabilities = 4;
+  map<string, string> metadata = 5;
+  repeated NativeProtocolSupport native_protocols = 6;
+}
+
+message AdapterCapabilities {
+  bool streaming = 1;
+  bool tool_use = 2;
+  bool vision = 3;
+  bool prompt_caching = 4;
+  uint32 max_tokens = 5;
+  uint32 max_concurrent = 6;
+}
+
+message NativeProtocolSupport {
+  string protocol = 1;          // anthropic | openai | responses | gemini
+  repeated string endpoints = 2; // messages | chat_completions | responses | generate_content
+  bool streaming = 3;
+}
+
+// ============================================================================
+// Health Check
+// ============================================================================
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  enum Status {
+    UNKNOWN = 0;
+    HEALTHY = 1;
+    DEGRADED = 2;
+    UNHEALTHY = 3;
+  }
+
+  Status status = 1;
+  string message = 2;
+  map<string, string> metrics = 3;
+  int64 uptime_seconds = 4;
+  uint32 active_requests = 5;
+  uint32 error_rate = 6;
+}
+
+// ============================================================================
+// Universal Request/Response Format
+// ============================================================================
+
+message UniversalRequest {
+  string request_id = 1;
+  string model = 2;
+  repeated Message messages = 3;
+  GenerationConfig config = 4;
+  repeated Tool tools = 5;
+  string system = 6;
+  RequestContext context = 7;
+}
+
+message Message {
+  enum Role {
+    ROLE_UNSPECIFIED = 0;
+    USER = 1;
+    ASSISTANT = 2;
+    SYSTEM = 3;
+    TOOL = 4;
+  }
+
+  Role role = 1;
+  repeated ContentPart content = 2;
+}
+
+message ContentPart {
+  oneof part {
+    TextPart text = 1;
+    ImagePart image = 2;
+    ToolCallPart tool_call = 3;
+    ToolResultPart tool_result = 4;
+  }
+}
+
+message TextPart {
+  string text = 1;
+}
+
+message ImagePart {
+  oneof source {
+    string url = 1;
+    bytes data = 2;
+  }
+  string mime_type = 3;
+  string detail = 4;
+}
+
+message ToolCallPart {
+  string id = 1;
+  string name = 2;
+  string arguments = 3;
+}
+
+message ToolResultPart {
+  string tool_call_id = 1;
+  string result = 2;
+  bool is_error = 3;
+}
+
+message Tool {
+  string name = 1;
+  string description = 2;
+  string parameters = 3;
+}
+
+message GenerationConfig {
+  int32 max_tokens = 1;
+  double temperature = 2;
+  double top_p = 3;
+  int32 top_k = 4;
+  repeated string stop_sequences = 5;
+  bool stream = 6;
+}
+
+message RequestContext {
+  string user_id = 1;
+  string session_id = 2;
+  string organization_id = 3;
+  int64 timeout_ms = 4;
+  map<string, string> metadata = 5;
+  string proxy_url = 6; // scheme://[user:pass@]host:port; empty = no outbound proxy
+}
+
+// ============================================================================
+// Native Protocol Request/Response Format
+// ============================================================================
+
+message NativeRequest {
+  string request_id = 1;
+  string protocol = 2;
+  string endpoint = 3;
+  string method = 4;
+  string path = 5;
+  string query = 6;
+  map<string, string> headers = 7;
+  bytes body = 8;
+  bool stream = 9;
+  RequestContext context = 10;
+}
+
+message NativeResponse {
+  string request_id = 1;
+  int32 status_code = 2;
+  map<string, string> headers = 3;
+  bytes body = 4;
+  bool end_stream = 5;
+  ErrorResponse error = 6;
+}
+
+// ============================================================================
+// Universal Response Format
+// ============================================================================
+
+message UniversalResponse {
+  string request_id = 1;
+
+  oneof response {
+    ContentChunk chunk = 2;
+    ToolCall tool_call = 3;
+    ErrorResponse error = 4;
+    CompletionInfo completion = 5;
+  }
+}
+
+message ContentChunk {
+  string text = 1;
+  int32 index = 2;
+  bool is_final = 3;
+}
+
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  string arguments = 3;
+  int32 index = 4;
+}
+
+message ErrorResponse {
+  int32 code = 1;
+  string message = 2;
+  string type = 3;
+  bool retryable = 4;
+  int64 retry_after_ms = 5;
+  string trace_id = 6;
+}
+
+message CompletionInfo {
+  string finish_reason = 1;
+  uint32 input_tokens = 2;
+  uint32 output_tokens = 3;
+  uint64 duration_ms = 4;
+  uint32 cache_creation_tokens = 5;
+  uint32 cache_read_tokens = 6;
+}
+
+// ============================================================================
+// Request Cancellation
+// ============================================================================
+
+message CancelRequestRequest {
+  string request_id = 1;
+}
+
+message CancelRequestResponse {
+  bool cancelled = 1;
+  string message = 2;
+}

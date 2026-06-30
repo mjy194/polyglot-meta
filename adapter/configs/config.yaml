@@ -1,0 +1,16 @@
+server:
+  port: 50051
+
+uipath:
+  base_url: "https://cloud.uipath.com/api"
+  client_id: "${UIPATH_CLIENT_ID}"
+  client_secret: "${UIPATH_CLIENT_SECRET}"
+  organization_id: "${UIPATH_ORG_ID}"
+
+auth:
+  db_path: "./data/tokens.db"
+  token_refresh_buffer: 300  # 提前 5 分钟刷新
+
+logging:
+  level: "info"
+  format: "text"
